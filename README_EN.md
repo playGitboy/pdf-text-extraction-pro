@@ -146,12 +146,6 @@ TextExtraction "合同.pdf" -f -m -o 合同文本.html
 
 **Fix**: New `-m` flag enables smart paragraph merging. The algorithm identifies document structure elements (clause numbers, headings, list items, field labels) and keeps them separate, while merging lines that belong to the same paragraph.
 
-**Merge Rules**:
-- ✅ Merge: line break between CJK chars, between English words, after comma/顿号, slightly indented continuation lines, number continuation
-- ❌ Don't merge: line break after period/question mark/exclamation, clause number lines, heading lines, bullet lines, field label lines (e.g. "房屋编号：")
-- 📐 Multi-column layout: lines with ≥4 consecutive spaces are split into independent lines
-- 📄 Consecutive blank lines: collapsed to single line break in all output formats
-
 **Structure Detection** (no regex for CJK, manual UTF-8 parsing for cross-platform compatibility):
 - Chinese chapter numbers: 第X条/章/节
 - Arabic/Chinese number lists: 1. / 一、
