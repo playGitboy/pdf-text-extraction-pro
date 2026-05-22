@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 3.15)
 project(TextExtraction VERSION 1.1.9)
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # options
 option(USE_BIDI  "should support bi-directional text")
 option(SHOULD_PARSE_INTERNAL_TABLES  "should table parsing read internal tables")
@@ -8,14 +11,16 @@ option(SHOULD_PARSE_INTERNAL_TABLES  "should table parsing read internal tables"
 
 # hummus dependency
 include(FetchContent)
-FetchContent_Declare(
-  PDFHummus
-  URL https://github.com/galkahana/PDF-Writer/archive/refs/tags/v4.8.1.tar.gz
-  URL_HASH SHA256=9b96c040cb04ca116450c0ed53462b6aa66b299c555401bf498b14db847f0898
-  DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-  FIND_PACKAGE_ARGS
-)
-FetchContent_MakeAvailable(PDFHummus)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/build/_deps/pdfhummus-src/CMakeLists.txt")
+    add_subdirectory(build/_deps/pdfhummus-src)
+else()
+    FetchContent_Declare(
+        pdfhummus
+        GIT_REPOSITORY https://github.com/galkahana/PDF-Writer.git
+        GIT_TAG main
+    )
+    FetchContent_MakeAvailable(pdfhummus)
+endif()
 
 # local code
 ADD_SUBDIRECTORY(TextExtraction)

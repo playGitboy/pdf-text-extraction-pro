@@ -2,204 +2,282 @@ A CLI (command line interface) to Extract text from PDF files.
 Use from your terminal to dump a PDF file text to the std output.
 Options exists to output to file, choose pages range etc.
 
-```bash
-Usage: TextExtraction.exe filepath <option(s)>
-filepath - pdf file path
-Options:
-        -s, --start <d>                         start text extraction from a page index. use negative numbers to subtract from pages count
-        -e, --end <d>                           end text extraction upto page index. use negative numbers to subtract from pages count
-        -b, --bidi <RTL|LTR>                    use bidi algo to convert visual to logical. provide default direction per document writing direction.
-        -p, --spacing <BOTH|HOR|VER|NONE>       add spaces between pieces of text considering their relative positions. default is BOTH
-        -t, --tables				extract tables instead of text. Each table is represented in CSV
-        -o, --output /path/to/file              write result to output file (or files for tables export)
-        -q, --quiet                             quiet run. only shows errors and warnings
-        -h, --help                              Show this help message
-        -d, --debug /path/to/file               create debug output file
-```
+This is an **enhanced version** based on [pdf-text-extraction](https://github.com/galkahana/pdf-text-extraction), with critical bug fixes for Chinese/CJK users and new features like duplicate character filtering and smart line merging.
 
-**New with 1.1.8** - pdf2.0 encryption supported. requries openssl.
+## What's New vs. Original
 
-**New with 1.1.5** - binaries are avaialable for download in the Releases section of the repo.
+| Feature | Original | Enhanced |
+|---------|----------|----------|
+| Chinese path/filename | ❌ `Cannot read file` error | ✅ Full Unicode support |
+| Page selection | ❌ Only `-s`/`-e` start/end | ✅ `-p` supports ranges & mixed: `1,3-5,10-12` |
+| Structured output | ❌ Plain text only | ✅ `-o` auto-detects HTML/JSON by extension |
+| Multi-file processing | ❌ Single file only | ✅ Multiple files/directories, recursive scan |
+| Windows terminal CJK | ❌ Garbled output | ✅ UTF-8 output |
+| CJK duplicate chars | ❌ e.g. "第第十十二二条条" | ✅ `-f` filter flag |
+| Smart line merging | ❌ Each line separate | ✅ `-m` merges paragraph lines |
+| Cross-platform | ❌ Windows-centric | ✅ Windows/Linux/macOS with proper line endings & path handling |
+| Static linking | ❌ Runtime dependencies | ✅ Fully static, zero dependencies |
+| Size optimization | ❌ Debug info included | ✅ strip + UPX compression |
 
-**New** it is now also possible to use this CLI to **extract tables**. This is still experimental due to how tables
-may be represented in many multiple ways, but with enough samples the code can be upgraded to be more able.
-When asking for table extraction only tables are output as CSV. std output will show CSV content of the PDF tables. When outputting
-to files each file will contain a single table. The output file name is the first table output file, where later tables file names will use
-the file name as base file name along with an ordinal (starting from 1).
-
-# First time around
-
-This is a C++ Project using CMake as project builder.
-To build/develop You will need:
-
-1. a compiler. for win you can use vs studio. choose community version - https://visualstudio.microsoft.com/
-2. cmake - download from here - https://cmake.org/
-
-# Building and Installing the project
-
-Once you installed pre-reqs, you can now build the project.
-
-## Create the project files
-
-To build you project start by creating a project file in a "build" folder off of the cmake configuration, like this:
+## Usage
 
 ```bash
-mkdir build
-cd build
-cmake ..
+TextExtraction <path1> [path2] ... [option(s)]
 ```
 
-Note that at this point the process will look for PDFHummus package. If not found locally it will download it from its [repo](https://github.com/galkahana/PDF-Writer). So internet connection is what you want there.
+Paths can be PDF files or directories. Directories are scanned recursively for PDF files. Paths and options can be mixed.
 
-## Build and install
+### Options
 
-Once you got the project file, you can now build the project. If you created an IDE file, you can use the IDE file to build the project.
-Alternatively you can do so from the command line, again using cmake. 
+| Flag | Description |
+|------|-------------|
+| `-p, --pages <spec>` | Page numbers to extract (1-based). Formats: `1,5,58` or `2-24` or `1,3-5,10-12`. Default: all pages |
+| `-f, --filter-dup` | Filter duplicate text placements (fixes doubled characters in some CJK PDFs) |
+| `-m, --merge-lines` | Merge broken lines into paragraphs (smart line joining for PDF text output) |
+| `--spacing <BOTH\|HOR\|VER\|NONE>` | Add spaces between text pieces. Default is BOTH |
+| `-t, --tables` | Extract tables instead of text (CSV output) |
+| `-o, --output <path>` | Write result to file (format by extension: .html/.htm=HTML, .json=JSON, else plain text) |
+| `-q, --quiet` | Quiet run, only errors and warnings |
+| `-d, --debug <path>` | Create debug output file |
+| `-h, --help` | Show help message |
 
-The following builds the project from its root folder:
-```bash
-cmake --build build --config release
-```
+### Page Spec Format (`-p`)
 
-This will build the project inside the build folder. You will be able to look up the result execultable per how you normally do when building with the relevant build environment. For example, for windows,  the `TextExtractionCLI/Release` folder will have the result exectuable named `TextExtraction`.
+| Format | Example | Description |
+|--------|---------|-------------|
+| Single pages | `-p 1,5,58` | Comma-separated page numbers |
+| Range | `-p 2-24` | Continuous page range |
+| Mixed | `-p 1,3-5,10-12` | Combine single pages and ranges |
+| All pages | (omit `-p`) | Default: extract all pages |
 
-The project builds both the cli executable and a dependency lib. The lib can be used in another project for PDF text extraction, and [the CLI code](./TextExtractionCLI/extract-text-cli.cpp)  is a good example of how it can be used.
+### Output Format (`-o` extension)
 
-If you want, you can use the "install" verb of cmake to install a built product. Use the prefix param to specify where you want the result to be installed to
+| Extension | Format | Description |
+|-----------|--------|-------------|
+| `.html` / `.htm` | HTML table | 3-column table: absolute file path (20%), page (5%), text (75%) |
+| `.json` | JSON array | `[{"file":"abs_path", "pages":[{"page":N, "text":"..."}]}]` |
+| Other | Plain text | Default format, same as original behavior |
 
-```bash
-cmake --install ./build --prefix ./etc/install --config release  --component executables
-```
-
-This will install the TextExtraction executable in ./etc/install. To install the CLI and other dependent libs drop the `--component executables` part.
-
-if you do not have `cmake --install` as option, you can use a regular build with install target instead, and specify the install target in configuration stage, like this:
-
-```bash
-cd build
-cmake .. -DCMAKE_INSTALL_PREFIX="../etc/install"
-cd ..
-
-cmake --build build/TextExtractionCLI --config release --target install 
-```
-
-## testing
-
-This project uses ctest for running tests. ctest is part of cmake and should be installed as part of cmake installation.
-To run the project tests (after having created the project files in ./build) go:
+### Common Examples
 
 ```bash
-ctest --test-dir build -C release
+# Extract all text from a PDF
+TextExtraction input.pdf
+
+# Extract page 1 only
+TextExtraction input.pdf -p 1
+
+# Extract pages 3-5 with duplicate character filtering
+TextExtraction input.pdf -p 3-5 -f
+
+# Extract specific pages
+TextExtraction input.pdf -p 1,3,5
+
+# Mixed: page 1, pages 3-5, pages 10-12, with filtering and merging
+TextExtraction input.pdf -p 1,3-5,10-12 -f -m
+
+# Enable paragraph line merging
+TextExtraction input.pdf -m
+
+# Both duplicate filtering and line merging, save to file
+TextExtraction input.pdf -f -m -o output.txt
+
+# Output as HTML table (per-page columns)
+TextExtraction input.pdf -p 1,3-5 -f -o result.html
+
+# Output as JSON (structured data for programmatic use)
+TextExtraction input.pdf -f -m -o result.json
+
+# Process multiple PDF files
+TextExtraction file1.pdf file2.pdf file3.pdf -f -o result.json
+
+# Recursively scan directory for PDFs
+TextExtraction /path/to/pdfs/ -f -o result.html
+
+# Mix files and directories
+TextExtraction file1.pdf /path/to/more/ -p 1-5 -f -m -o result.json
+
+# Extract tables
+TextExtraction input.pdf -t -o tables.csv
+
+# Handle Chinese filename
+TextExtraction "合同.pdf" -f -m -o 合同文本.html
 ```
 
-This should scan the folders for tests and run them.
+## Bug Fixes & Enhancements Detail
 
+### 1. Chinese Path/Filename Support
 
-## Project as cmake Package
+**Problem**: Files with Chinese characters in path/name cause `Cannot read file` error.
 
-The cmake project defines TextExtraction as a Package. There are 2 targets to this package:
+**Cause**: Windows `main(int argc, char* argv[])` uses system default encoding, non-UTF-8 locales truncate Chinese.
 
-- TextExtraction::TextExtraction
-- TextExtraction::TextExtractionCLI
+**Fix**: Use `CommandLineToArgvW()` to get wide-char arguments, convert to UTF-8.
 
-The `TextExtraction` is a lib that you can use in your own project to extract text. You can read [the CLI code](./TextExtractionCLI/extract-text-cli.cpp) as a useful example on how to use the lib.
-The `TextExtractionCLI` is the CLI part, which you can use as target as well.
+### 2. Flexible Page Selection
 
-In your project cmakefile you can import the project like a regular package:
+**Problem**: Original only supports `-s` start page and `-e` end page, cannot specify non-contiguous pages.
 
-```cmake
-find_package (TextExtraction)
+**Fix**: Merged `-s`/`-e` into `-p`/`--pages` supporting multiple formats. Pages are 1-based, auto-converted to internal 0-based index.
 
-target_link_libraries(MyTarget TextExtraction::TextExctraction)
-```
+### 3. Multi-file/Directory Processing
 
-## VSCode usage
+**Problem**: Original only handles a single file.
 
-If you are developing this project using vscode here's some suggestions to help you:  
-- install vscode C++ extensions:
-    - C/C++
-    - C/C++ Extension Pack
-    - C/C++ Themes
-- install vscode cmake extensions:
-    - Cmake
-    - Cmake Tools
-    - CMake Test Explorder
+**Fix**: Support multiple files, directories, and mixed input. Directories are recursively scanned. Errors in one file don't stop processing others. HTML/JSON output merges all files; plain text separates with `---`.
 
-This should help you enable testing and debugging in vscode. Specifically you can debug the TextExtrction CLI with the `(lldb) launch` debug target, and the tests are debuggable as well.
+### 4. Windows Terminal CJK Display
 
-# Running
-The end result is an executable, so just run it from comman line (it's a regular cli).
+**Problem**: Extracted Chinese text appears garbled in terminal.
 
-The minimal run requires a file path to a PDF from which you would like read the text, say on windows:
-```console
-etc\install\bin\TextExtraction.exe sample.pdf
-```
+**Fix**: Set `SetConsoleOutputCP(CP_UTF8)` and `_setmode(_fileno(stdout), _O_BINARY)` at startup.
 
-# Bidirectional text support
-PDF files contain text as drawing instructions. As a result what's being parsed is per the _visual_ order of text.
-This doesn't matter much if your text is latin, or wholly left to right. However when the PDF has right to left text, either by itself or combined with left-to-right text or even numbers, the parsed text will appear to be reversed, or otherwise disorganized.
-To take care of this there is support for Bidi reversal algorithm. This algorithm is implemented in ICU library, and this executable will use it if instructed so, and if ICU library is available.
+### 5. CJK Duplicate Character Filtering
 
-BIDI conversion is turned off by default, as it does carry some performance price, however you can unlock it by using the USE_BIDI configuration variable. When calling `cmake` for congiruation, add `-DUSE_BIDI=1`. like this:
+**Problem**: Some PDFs produce doubled characters like "第第十十二二条条 逾逾期期交交付付责责任任".
+
+**Cause**: PDF content stream draws the same text twice (shadow/stroke effect or overlapping text layers). Duplicate placements have similar positions (center distance < 1.5× font height).
+
+**Fix**: New center-distance dedup algorithm, enabled via `-f` flag.
+
+### 6. Smart Line Merging
+
+**Problem**: PDF text extraction outputs each line independently, splitting paragraphs incorrectly.
+
+**Fix**: New `-m` flag enables smart paragraph merging. The algorithm identifies document structure elements (clause numbers, headings, list items, field labels) and keeps them separate, while merging lines that belong to the same paragraph.
+
+**Merge Rules**:
+- ✅ Merge: line break between CJK chars, between English words, after comma/顿号, slightly indented continuation lines, number continuation
+- ❌ Don't merge: line break after period/question mark/exclamation, clause number lines, heading lines, bullet lines, field label lines (e.g. "房屋编号：")
+- 📐 Multi-column layout: lines with ≥4 consecutive spaces are split into independent lines
+- 📄 Consecutive blank lines: collapsed to single line break in all output formats
+
+**Structure Detection** (no regex for CJK, manual UTF-8 parsing for cross-platform compatibility):
+- Chinese chapter numbers: 第X条/章/节
+- Arabic/Chinese number lists: 1. / 一、
+- Multi-level numbering: 1.1 / 1.1.1
+- Parenthesized numbers: （一）/ (1)
+- Circled numbers: ①②③
+- Bullet/dash lists: • / — / -
+- Field labels: 1-8 CJK chars followed by colon (e.g. "合同编号：")
+
+### 7. Cross-Platform Compatibility
+
+**Line Endings**: Output uses platform-appropriate line endings (CRLF on Windows, LF on Linux/macOS). Both `NormalizeLineEndings` and `CollapseBlankLines` adapt automatically.
+
+**Path Handling**: `PathCombine` uses `\` on Windows and `/` on Linux/macOS. `GetAbsolutePath` uses `GetFullPathNameW` on Windows (works even if file doesn't exist) and `getcwd` on Linux/macOS.
+
+**C++ Standard**: CMake explicitly sets `CMAKE_CXX_STANDARD=14` with `CMAKE_CXX_STANDARD_REQUIRED=ON`, ensuring consistent compilation across compilers.
+
+**UTF-8 Processing**: All CJK character detection uses manual UTF-8 decoding (`DecodeUTF8Char` + `IsCJKCodepoint`) instead of regex with Unicode ranges, avoiding `std::regex` incompatibilities across MinGW/libstdc++/libc++/MSVC STL.
+
+**Boundary Safety**: `DecodeUTF8Char` includes bounds checking (`pos + charLen > len`) to prevent buffer overreads.
+
+## Building
+
+### Windows (MinGW, Win7 compatible)
 
 ```bash
-# only if you didnt create build lib yet
-mkdir build
-# then...
-cd build
+# Prerequisites: MinGW-w64 GCC, CMake, UPX (optional)
+build_windows.bat
+```
+
+Or manually:
+```bash
+mkdir build_mingw && cd build_mingw
+cmake -G "MinGW Makefiles" ^
+      -DCMAKE_BUILD_TYPE=Release ^
+      -DCMAKE_C_FLAGS="-O2 -DNDEBUG -D_WIN32_WINNT=0x0601" ^
+      -DCMAKE_CXX_FLAGS="-O2 -DNDEBUG -D_WIN32_WINNT=0x0601 -static-libgcc -static-libstdc++" ^
+      -DCMAKE_EXE_LINKER_FLAGS="-s -static" ^
+      ..
+mingw32-make -j%NUMBER_OF_PROCESSORS%
+strip TextExtractionCLI\TextExtraction.exe
+upx --best TextExtractionCLI\TextExtraction.exe
+```
+
+### Linux
+
+```bash
+# Option 1: Direct build
+chmod +x build_linux.sh
+./build_linux.sh
+
+# Option 2: Docker build
+docker build -t pdf-text-extraction .
+docker create --name extract pdf-text-extraction
+docker cp extract:/TextExtraction-linux-x64 ./
+docker rm extract
+```
+
+### macOS
+
+```bash
+chmod +x build_macos.sh
+./build_macos.sh
+```
+
+### Build Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `-D_WIN32_WINNT=0x0601` | Target Windows 7 (0x0601) |
+| `-static-libgcc -static-libstdc++` | Static link C/C++ runtime |
+| `-s` | Strip debug symbols at link time |
+| `-static` | Full static linking (Windows) |
+| `-O2` | Optimization level |
+| `-DNDEBUG` | Disable assert and debug assertions |
+
+## Using as a Library
+
+```cpp
+#include "TextExtraction.h"
+
+TextExtraction extraction;
+extraction.ExtractText("input.pdf");  // all pages
+
+// Specify page set (0-based)
+std::set<long> pages = {0, 2, 3, 4};  // pages 1, 3, 4, 5
+extraction.ExtractText("input.pdf", pages);
+
+// Get all text
+std::ostringstream stream;
+extraction.GetResultsAsText(-1, TextComposer::eSpacingBoth, stream, true);
+std::string text = stream.str();
+
+// Get text per page (for structured output)
+for(size_t i = 0; i < extraction.GetPageCount(); ++i) {
+    long pageNum = extraction.GetOriginalPageNumber(i) + 1;  // 1-based
+    std::ostringstream pageStream;
+    extraction.GetPageAsText(i, -1, TextComposer::eSpacingBoth, pageStream, true);
+    // pageNum: page number, pageStream.str(): page text
+}
+```
+
+## Bidirectional Text Support
+
+PDF files contain text as drawing instructions, so parsed text is in visual order. For right-to-left text or mixed RTL/LTR content, the parsed text may appear reversed or disorganized.
+
+BIDI conversion uses ICU library and is off by default. Enable with `-DUSE_BIDI=1` during cmake configuration:
+
+```bash
+mkdir build && cd build
 cmake .. -DUSE_BIDI=1
 ```
 
-the module code does not come with ICU library pre-bundled with the code, so it will attempt to install it and if succesful, BIDI conversion will be supported. You can tell that BIDI conversion is supported by checking the help text of `TextExtraction`. If it shows the `-b, --bidi <RTL|LTR>` option, then it is available.
+ICU installation tries: (1) Win10 SDK native ICU on Windows, (2) pre-installed package (e.g. `brew install icu4c` on Mac), (3) download and build ICU72 from source.
 
-ICU Library installation process will try the following:
-1. On windows specifically, it will try to use the existing Win10 SDK natively installed ICU library
-2. Either on windows or other platform it will then try to find a pre-installed pacakge. For example, your Mac might already have it installed. you can help with a good ol' `brew install icu4c`.
-3. If didn't work, then it will try to download ICU72 from it's source, and compile it. on most envs it will use the ICU makefile config, and on windows it will use the msbuild (this attempts to follow the instructions from icu). i think mingw will not work here...but you can try...and you can tweak `./TextExtraction/CMakeLists.txt` to try and make it work. there are pointers there for info.
+## Solution Architecture
 
-# Internal table parsing
-When parsing for tables the final output is CSV. CSVs can't handle split cells (normally found in the header, there'd be a single cell spanning multiple cells and then internally there'd be a split providing the individual columns headers names) so it's not important to parse internal columns/rows of a cell. However for the sake of excercise, and if anyone wants to output this to Excel/Google Sheets/Numbers where split cells are a reality, I did program internal cell parsing for table structure which would provide the relevant info. It's off by default, and you can use the SHOULD_PARSE_INTERNAL_TABLES configuratin variable to turn it on. This would mean the `CellInRow` struct might have a non null internalTable, that is - when one such exists. when calling cmake for configuration, add `-DSHOULD_PARSE_INTERNAL_TABLES=1` to get the parsing going.
+This implementation is based on hummus PDF library. It uses the parsing capabilities to interpret page content and understand lines and texts.
 
-# Using the code
+- `PDFRecursiveInterpreter` — basic PDF content interpretation, recurses into forms
+- `GraphicContentInterpreter` — understands path and text operators
+- `TextInterpreter` — converts text placements to actual text using font data
+- `LineMerger` — smart paragraph merging for PDF text output (new)
+- `TableComposer` — builds tables from lines and text
+- `TableCSVExport` — exports Table objects to CSV
 
-If you want to use the text extraction capabilities in your own software, skip the `extract-text-cli.cpp` and using `TextExtraction` class directly. you provide it with a file path in `ExtractText()` and later can pick up the results in `GetResultsAsText()`. Modify it to your needs if you have other forms of desired output. The internal structure `textsForPages` allows you to be more flexible as to what you do with the text, and you can use `GetResultsAsText` as a reference implementation.
+## License
 
-As for tables extraction, the class `TableExtraction` might be of use. It's `ExtractTables()` method  gets the same paraps as the text extraction `ExtractText()` and the results will be placed in `tablesForPages` data structure. To get CSV output you can either use `GetAllAsCSVText` which returns a single string of all tables CSV representaitons concatenated...or a more useful `GetTableAsCSVText` which
-gets a single Table construct from `tablesForPages` and returns a CSV representation for it.
-
-You are also welcome to use the `PDFRecursiveInterpreter` directly for any content intrepretation needs you may have.
-
-License is Apache2, and provided [here](./LICENSE)
-
-# Features and implementation details
-
-This text extraction algorithm is based on a previous Javascript based implementation that was described here - https://pdfhummus.com/post/156548561656/extracting-text-from-pdf-files. Most limitations stated there are true to this implementation:
-
-1. No support of vertical writing fonts. In calculating the text measures i’m assuming horizontal. 
-2. No support for large fonts (CIDs) that don’t hold unicode map (that is, only got a predefined Cmap name).
-The 2nd is a little cryptic. Thing is i wasn't 100% sure how to deal with those CID fonts texts and translate them properly. maybe some sample files of such cases can help me figure it out. i reckon there shouldn't be many of those in the wild cause i think most of them do have a unicode map.
-
-
-This implementation has a few enhancments on top of the original:
-- Computed structure is equivalent to the Javascript one, however the public output is text, for the sake of convenience. The code includes some heuristics to determine the text from this structure. The implementaiton is equivalent to the only usage i had back then...and it turned out quite good for my needs. I extended it to support multiple text orientations.
-- I put in some code to better treat inline images, and skip them, so as not to interfere with the general interpretation. This should take care of some missing texts i had back then.
-- bidi support included via ICU
-
-
-Tables parsing is based on the very few samples I tried, so it's probably quite limited at this point. The tables parsing reuses the text intepretation of the base text extraction algorithm as well as attempting to locate vertical and horizontal lines to determine tables based on them. Vertical and horizontal lines are then grouped to tables based on whether they have intersection relationships (direct or indirect by instersecting with lines that in turn intersect etc.) accounting for lines that only split cells and are not 100% column/row lines. It then attempts to determine rows and cells in those rows. Then based on the text placements locations it posits them in their right cells.
-
-# Solution Archiecture
-
-This implementation is based on hummus PDF library. Specifically it uses the parsing capabilities of hummus to interpret the pages content and understand things like lines and texts.
-
-Both `TextExtraction` and `TableExtraction` run through interpretation of pages content to extract relevant placeemnts - glyphs or glyphs and lines respectively. Then each one attempts to understand texts from glyphs and parsed font data. For tables lines are also inspected to determine horizontal and vertical lines that form tables.
-
-The `PDFRecursiveInterpreter` is used for the very basic interpretation of PDF content. it is named recursive becasue it recurses into forms placed in what page content is fed for interpreation. The interpreter launches an event to its handler every time it comes up with a content drawing operator. It provides to the handler both the operator and operand. `PDFRecursiveInterpreter` can  be used as is in many possible implementations involving PDF content interpreation, such as extracting content (text, images etc.) or even rendering.
-
-The operators and operands are fed to the `GraphicContentInterpreter`. This class understands specific operators and what they do. At this point it understands anything that has to do with paths and texts, to be able to support the relevant implementation for this code, but it can have more code added to it to understand much more...based on the desired implementation. In its form here it launches and event to its handler for every placed text elements and for every placed path.
-
-The `TextInterpreter` code is used to convert the text placements provided by the interpreter to actual text. The text placements only contain glyph information and local graphic state, and the `TextInterpreter` adds font data to determine texts from the glyphs and their position in the page. Upon completing translating a text placement it launches its own text complete event to provide its handler with the translated and posited text element (there's a certain nuance here with respect to PDF text elements and actual text placements...which will skip in this description). 
-
-The `TableComposer` code is used to build tables from collections of vertical and horizontal lines and text. Normally used at the page level it can figure out which lines map to which tables (in case there are multiple tables on the page) and which texts go into which cells. Its output is a list of tables each defining rows and cells and texts in those cells. There's quite a bit of heuristics in the whole table construction process...which is why it's a bit more at an experimental stage than the older text extraction part.
-
-For tables there's also `TableCSVExport` which exports a single `Table` object build by the `TableComposer` to a CSV string.
+Apache License 2.0 (same as original project)
