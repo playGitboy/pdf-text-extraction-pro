@@ -69,7 +69,40 @@ EStatusCode TextExtraction::ExtractTextPlacements(PDFParser* inParser, long inSt
         currentPageScopeBox[3] = mediaBox.UpperRightY;
 
         textsForPages.push_back(ParsedTextPlacementList());
-        // the interpreter will trigger the textInterpreter which in turn will trigger this object to collect text elements
+        extractedPageNumbers.push_back((long)i);
+        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this);  
+    }    
+
+    textInterpeter.ResetInterpretationState();
+
+    return status;
+}
+
+EStatusCode TextExtraction::ExtractTextPlacements(PDFParser* inParser, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+    unsigned long totalPages = inParser->GetPagesCount();
+    GraphicContentInterpreter interpreter;
+
+    for(set<long>::const_iterator it = inPages.begin(); it != inPages.end() && status == eSuccess; ++it) {
+        unsigned long pageIdx = (unsigned long)(*it >= 0 ? *it : (long)(totalPages + *it));
+        if(pageIdx >= totalPages)
+            continue;
+
+        RefCountPtr<PDFDictionary> pageObject(inParser->ParsePage(pageIdx));
+        if(!pageObject) {
+            status = eFailure;
+            break;
+        }
+
+        PDFPageInput pageInput(inParser,pageObject);
+        PDFRectangle mediaBox = pageInput.GetMediaBox();
+        currentPageScopeBox[0] = mediaBox.LowerLeftX;
+        currentPageScopeBox[1] = mediaBox.LowerLeftY;
+        currentPageScopeBox[2] = mediaBox.UpperRightX;
+        currentPageScopeBox[3] = mediaBox.UpperRightY;
+
+        textsForPages.push_back(ParsedTextPlacementList());
+        extractedPageNumbers.push_back((long)pageIdx);
         interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this);  
     }    
 
@@ -82,6 +115,7 @@ static const string scEmpty = "";
 
 void TextExtraction::ClearState() {
     textsForPages.clear();
+    extractedPageNumbers.clear();
     LatestWarnings.clear();
     LatestError.code = eErrorNone;
     LatestError.description = scEmpty;
@@ -151,16 +185,97 @@ PDFHummus::EStatusCode TextExtraction::ExtractText(IByteReaderWithPosition* inSt
     return status;
 }
 
+PDFHummus::EStatusCode TextExtraction::ExtractText(const std::string& inFilePath, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+    InputFile sourceFile;
+
+    ClearState();
+
+    do {
+        status = sourceFile.OpenFile(inFilePath);
+        if (status != eSuccess) {
+            LatestError.code = eErrorFileNotReadable;
+            LatestError.description = string("Cannot read file ") + inFilePath;
+            break;
+        }
+
+        PDFParser parser;
+        status = parser.StartPDFParsing(sourceFile.GetInputStream());
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTextPlacements(&parser, inPages);
+        if(status != eSuccess)
+            break;
+
+    } while(false);
+
+    return status;
+}
+
+PDFHummus::EStatusCode TextExtraction::ExtractText(PDFParser* inParser, const std::set<long>& inPages) {
+    ClearState();
+    return ExtractTextPlacements(inParser, inPages);
+}
+
+PDFHummus::EStatusCode TextExtraction::ExtractText(IByteReaderWithPosition* inStream, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+
+    ClearState();
+
+    do {
+        PDFParser parser;
+        status = parser.StartPDFParsing(inStream);
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTextPlacements(&parser, inPages);
+        if(status != eSuccess)
+            break;
+
+    } while(false);
+
+    return status;
+}
+
 static const string scCRLN = "\r\n";
 
-void TextExtraction::GetResultsAsText(int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream) {
+void TextExtraction::GetResultsAsText(int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream, bool filterDuplicates) {
     ParsedTextPlacementListList::iterator itPages = textsForPages.begin();
-    TextComposer composer(bidiFlag, spacingFlag);
+    TextComposer composer(bidiFlag, spacingFlag, filterDuplicates);
 
     for(; itPages != textsForPages.end();++itPages) {
         composer.ComposeText(*itPages, outStream);
         outStream<<scCRLN;
     }
+}
+
+void TextExtraction::GetPageAsText(size_t pageIndex, int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream, bool filterDuplicates) {
+    if(pageIndex >= textsForPages.size())
+        return;
+
+    ParsedTextPlacementListList::iterator itPages = textsForPages.begin();
+    advance(itPages, pageIndex);
+    TextComposer composer(bidiFlag, spacingFlag, filterDuplicates);
+    composer.ComposeText(*itPages, outStream);
+}
+
+size_t TextExtraction::GetPageCount() const {
+    return textsForPages.size();
+}
+
+long TextExtraction::GetOriginalPageNumber(size_t pageIndex) const {
+    if(pageIndex >= extractedPageNumbers.size())
+        return -1;
+    return extractedPageNumbers[pageIndex];
 }
 
 

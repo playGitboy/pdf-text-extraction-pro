@@ -42,9 +42,10 @@ double BoxBottom(const double (&inBox)[4]) {
 }
 
 
-TextComposer::TextComposer(int inBidiFlag, ESpacing inSpacingFlag) {
+TextComposer::TextComposer(int inBidiFlag, ESpacing inSpacingFlag, bool inFilterDuplicates) {
     bidiFlag = inBidiFlag;
     spacingFlag = inSpacingFlag;
+    filterDuplicates = inFilterDuplicates;
 }
 
 TextComposer::~TextComposer() {
@@ -152,6 +153,76 @@ unsigned long GuessHorizontalSpacingBetweenPlacements(const ParsedTextPlacement&
 
 static const string scCRLN = "\r\n";
 
+static bool IsDuplicateTextPlacement(const ParsedTextPlacement& a, const ParsedTextPlacement& b) {
+    if (a.text != b.text || a.text.empty())
+        return false;
+
+    double cx1 = (a.globalBbox[0] + a.globalBbox[2]) / 2.0;
+    double cy1 = (a.globalBbox[1] + a.globalBbox[3]) / 2.0;
+    double cx2 = (b.globalBbox[0] + b.globalBbox[2]) / 2.0;
+    double cy2 = (b.globalBbox[1] + b.globalBbox[3]) / 2.0;
+
+    double h1 = a.globalBbox[3] - a.globalBbox[1];
+    double h2 = b.globalBbox[3] - b.globalBbox[1];
+    double maxH = std::max(h1, h2);
+    double w1 = a.globalBbox[2] - a.globalBbox[0];
+    double w2 = b.globalBbox[2] - b.globalBbox[0];
+
+    if (maxH <= 0)
+        return false;
+
+    double dist = sqrt((cx1 - cx2) * (cx1 - cx2) + (cy1 - cy2) * (cy1 - cy2));
+
+    if (dist < maxH * 0.3)
+        return true;
+
+    double minW = std::min(w1, w2);
+    if (minW <= 0)
+        return false;
+
+    double overlapLeft = std::max(a.globalBbox[0], b.globalBbox[0]);
+    double overlapRight = std::min(a.globalBbox[2], b.globalBbox[2]);
+    double overlapBottom = std::max(a.globalBbox[1], b.globalBbox[1]);
+    double overlapTop = std::min(a.globalBbox[3], b.globalBbox[3]);
+
+    double overlapW = std::max(0.0, overlapRight - overlapLeft);
+    double overlapH = std::max(0.0, overlapTop - overlapBottom);
+    double overlapArea = overlapW * overlapH;
+
+    double areaA = w1 * h1;
+    double areaB = w2 * h2;
+    double minArea = std::min(areaA, areaB);
+
+    if (minArea <= 0)
+        return false;
+
+    double iou = overlapArea / minArea;
+
+    if (iou > 0.3)
+        return true;
+
+    return false;
+}
+
+static ParsedTextPlacementVector FilterOverlappingTexts(const ParsedTextPlacementVector& inTexts) {
+    ParsedTextPlacementVector result;
+
+    for (size_t i = 0; i < inTexts.size(); ++i) {
+        bool isDuplicate = false;
+        for (size_t j = 0; j < result.size(); ++j) {
+            if (IsDuplicateTextPlacement(inTexts[i], result[j])) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            result.push_back(inTexts[i]);
+        }
+    }
+
+    return result;
+}
+
 void TextComposer::MergeLineStreamToResultString(
     const stringstream& inStream, 
     int bidiFlag,
@@ -190,8 +261,10 @@ void TextComposer::ComposeText(const ParsedTextPlacementList& inTextPlacements, 
     ParsedTextPlacementVector sortedTextCommands(inTextPlacements.begin(), inTextPlacements.end());
     sort(sortedTextCommands.begin(), sortedTextCommands.end(), CompareParsedTextPlacement);
 
-    ParsedTextPlacementVector::iterator itCommands = sortedTextCommands.begin();
-    if(itCommands == sortedTextCommands.end())
+    ParsedTextPlacementVector filteredTextCommands = filterDuplicates ? FilterOverlappingTexts(sortedTextCommands) : sortedTextCommands;
+
+    ParsedTextPlacementVector::iterator itCommands = filteredTextCommands.begin();
+    if(itCommands == filteredTextCommands.end())
         return;
 
     // k. got some text, let's build it
@@ -201,7 +274,7 @@ void TextComposer::ComposeText(const ParsedTextPlacementList& inTextPlacements, 
     CopyBox(itCommands->globalBbox, lineBox);
     lineResult<<latestItem.text;
     ++itCommands;
-    for(; itCommands != sortedTextCommands.end();++itCommands) {
+    for(; itCommands != filteredTextCommands.end();++itCommands) {
         if(AreSameLine(latestItem, *itCommands)) {
             if(addHorizontalSpaces) {
                 unsigned long spaces = GuessHorizontalSpacingBetweenPlacements(latestItem, *itCommands);

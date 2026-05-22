@@ -21,6 +21,7 @@ class IByteReaderWithPosition;
 #include <sstream>
 #include <string>
 #include <list>
+#include <set>
 
 typedef std::list<ParsedTextPlacementList> ParsedTextPlacementListList;
 typedef std::list<TableList> TableListList;
@@ -36,6 +37,10 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
         PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, long inStartPage=0, long inEndPage=-1);
         PDFHummus::EStatusCode ExtractTables(PDFParser* inParser, long inStartPage=0, long inEndPage=-1);
         PDFHummus::EStatusCode ExtractTables(IByteReaderWithPosition* inStream, long inStartPage=0, long inEndPage=-1);
+
+        PDFHummus::EStatusCode ExtractTables(const std::string& inFilePath, const std::set<long>& inPages);
+        PDFHummus::EStatusCode ExtractTables(PDFParser* inParser, const std::set<long>& inPages);
+        PDFHummus::EStatusCode ExtractTables(IByteReaderWithPosition* inStream, const std::set<long>& inPages);
 
         ExtractionError LatestError;
         ExtractionWarningList LatestWarnings;  
@@ -67,6 +72,7 @@ class TableExtraction : public ITextInterpreterHandler, IGraphicContentInterpret
 
 
         PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, long inStartPage, long inEndPage);
+        PDFHummus::EStatusCode ExtractTablePlacements(PDFParser* inParser, const std::set<long>& inPages);
         void ComposeTables();
         void ClearState();
         

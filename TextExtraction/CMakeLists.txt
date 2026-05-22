@@ -59,6 +59,8 @@ lib/table-composition/TableComposer.cpp
 lib/table-composition/TableComposer.h
 lib/text-composition/TextComposer.cpp
 lib/text-composition/TextComposer.h
+lib/text-composition/LineMerger.cpp
+lib/text-composition/LineMerger.h
 lib/text-parsing/ITextInterpreterHandler.h
 lib/text-parsing/ParsedTextPlacement.h
 lib/text-parsing/TextInterpreter.cpp

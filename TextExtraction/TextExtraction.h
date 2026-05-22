@@ -16,6 +16,8 @@ class IByteReaderWithPosition;
 #include <sstream>
 #include <string>
 #include <list>
+#include <set>
+#include <vector>
 
 typedef std::list<ParsedTextPlacementList> ParsedTextPlacementListList;
 typedef std::list<ExtractionWarning> ExtractionWarningList;
@@ -31,6 +33,10 @@ class TextExtraction : public ITextInterpreterHandler, IGraphicContentInterprete
         PDFHummus::EStatusCode ExtractText(PDFParser* inParser, long inStartPage=0, long inEndPage=-1);
         PDFHummus::EStatusCode ExtractText(IByteReaderWithPosition* inStream, long inStartPage=0, long inEndPage=-1);
 
+        PDFHummus::EStatusCode ExtractText(const std::string& inFilePath, const std::set<long>& inPages);
+        PDFHummus::EStatusCode ExtractText(PDFParser* inParser, const std::set<long>& inPages);
+        PDFHummus::EStatusCode ExtractText(IByteReaderWithPosition* inStream, const std::set<long>& inPages);
+
         ExtractionError LatestError;
         ExtractionWarningList LatestWarnings;  
 
@@ -43,7 +49,10 @@ class TextExtraction : public ITextInterpreterHandler, IGraphicContentInterprete
             const std::string& inTargetOutputFilePath
         );
 
-        void GetResultsAsText(int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream);
+        void GetResultsAsText(int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream, bool filterDuplicates = false);
+        void GetPageAsText(size_t pageIndex, int bidiFlag, TextComposer::ESpacing spacingFlag, std::ostream& outStream, bool filterDuplicates = false);
+        size_t GetPageCount() const;
+        long GetOriginalPageNumber(size_t pageIndex) const;
 
         // IGraphicContentInterpreterHandler implementation
         virtual bool OnTextElementComplete(const TextElement& inTextElement);
@@ -56,7 +65,9 @@ class TextExtraction : public ITextInterpreterHandler, IGraphicContentInterprete
     private:
         TextInterpeter textInterpeter;
         double currentPageScopeBox[4];
+        std::vector<long> extractedPageNumbers;
 
         PDFHummus::EStatusCode ExtractTextPlacements(PDFParser* inParser, long inStartPage, long inEndPage);
+        PDFHummus::EStatusCode ExtractTextPlacements(PDFParser* inParser, const std::set<long>& inPages);
         void ClearState();
 };

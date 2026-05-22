@@ -18,7 +18,7 @@ class TextComposer {
             eSpacingBoth = 3
         };
     
-        TextComposer(int inBidiFlag, ESpacing inSpacingFlag);
+        TextComposer(int inBidiFlag, ESpacing inSpacingFlag, bool inFilterDuplicates = false);
         virtual ~TextComposer();
 
 
@@ -27,6 +27,7 @@ class TextComposer {
     private:
         int bidiFlag;
         ESpacing spacingFlag;
+        bool filterDuplicates;
 
     void MergeLineStreamToResultString(
         const std::stringstream& inStream, 

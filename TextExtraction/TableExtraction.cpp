@@ -93,6 +93,35 @@ EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, long in
     return status;
 }
 
+EStatusCode TableExtraction::ExtractTablePlacements(PDFParser* inParser, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+    unsigned long totalPages = inParser->GetPagesCount();
+    GraphicContentInterpreter interpreter;
+
+    for(set<long>::const_iterator it = inPages.begin(); it != inPages.end() && status == eSuccess; ++it) {
+        unsigned long pageIdx = (unsigned long)(*it >= 0 ? *it : (long)(totalPages + *it));
+        if(pageIdx >= totalPages)
+            continue;
+
+        RefCountPtr<PDFDictionary> pageObject(inParser->ParsePage(pageIdx));
+        if(!pageObject) {
+            status = eFailure;
+            break;
+        }
+
+        PDFPageInput pageInput(inParser,pageObject);
+
+        mediaBoxesForPages.push_back(pageInput.GetMediaBox());
+        textsForPages.push_back(ParsedTextPlacementList());
+        tableLinesForPages.push_back(Lines());
+        interpreter.InterpretPageContents(inParser, pageObject.GetPtr(), this);  
+    }    
+
+    textInterpeter.ResetInterpretationState();
+
+    return status;
+}
+
 static const string scEmpty = "";
 
 void TableExtraction::ClearState() {
@@ -166,6 +195,75 @@ PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* i
         }
 
         status = ExtractTablePlacements(&parser, inStartPage, inEndPage);
+        if(status != eSuccess)
+            break;
+
+        ComposeTables();
+    } while(false);
+
+    return status;    
+}
+
+PDFHummus::EStatusCode TableExtraction::ExtractTables(const std::string& inFilePath, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+    InputFile sourceFile;
+
+    ClearState();
+
+    do {
+        status = sourceFile.OpenFile(inFilePath);
+        if (status != eSuccess) {
+            LatestError.code = eErrorFileNotReadable;
+            LatestError.description = string("Cannot read file ") + inFilePath;
+            break;
+        }
+
+        PDFParser parser;
+        status = parser.StartPDFParsing(sourceFile.GetInputStream());
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTablePlacements(&parser, inPages);
+        if(status != eSuccess)
+            break;
+
+        ComposeTables();
+    } while(false);
+
+    return status;
+}
+
+PDFHummus::EStatusCode TableExtraction::ExtractTables(PDFParser* inParser, const std::set<long>& inPages) {
+    ClearState();
+
+    PDFHummus::EStatusCode status = ExtractTablePlacements(inParser, inPages);
+    if(status == eSuccess) {
+        ComposeTables();
+    }
+
+    return status;
+}
+
+PDFHummus::EStatusCode TableExtraction::ExtractTables(IByteReaderWithPosition* inStream, const std::set<long>& inPages) {
+    EStatusCode status = eSuccess;
+
+    ClearState();
+
+    do {
+        PDFParser parser;
+        status = parser.StartPDFParsing(inStream);
+        if(status != eSuccess)
+        {
+            LatestError.code = eErrorInternalPDFWriter;
+            LatestError.description = string("Failed to parse file");
+            break;
+        }
+
+        status = ExtractTablePlacements(&parser, inPages);
         if(status != eSuccess)
             break;
 
